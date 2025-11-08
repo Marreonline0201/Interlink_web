@@ -1,105 +1,198 @@
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import ringsArt from "../assets/rings.png";
+import AuthHeading from "../components/AuthHeading";
+import AuthInput from "../components/AuthInput";
+import AuthLayout from "../components/AuthLayout";
+import type {
+  AuthCredentials,
+  SignInResponse,
+  SupabaseProfileResponse,
+} from "../types/user";
+import { authApi, AuthApiError } from "../services/authApi";
+import { useAuth } from "../context/AuthContext";
+
+const STORAGE_KEY = "interlink.auth.session";
 
 const LoginPage = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const [credentials, setCredentials] = useState<AuthCredentials>({
+    email: "",
+    password: "",
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleCredentialChange =
+    (field: keyof AuthCredentials) =>
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setCredentials((previous) => ({
+        ...previous,
+        [field]: value,
+      }));
+    };
+
+  const persistSession = (
+    authResponse: SignInResponse,
+    profile: SupabaseProfileResponse["user"]
+  ) => {
+    if (typeof window === "undefined") return;
+
+    const storagePayload = {
+      user: profile ?? authResponse.user ?? null,
+      session: authResponse.session ?? null,
+      storedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storagePayload));
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!email || !password) {
-      alert("Please fill in both email and password.");
+    if (!credentials.email || !credentials.password) {
+      setErrorMessage("Please fill in both email and password.");
       return;
     }
 
     setIsSubmitting(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
-    setTimeout(() => {
-      alert(
-        `Simulated login:\n• Email: ${email}\n• Password: ${"*".repeat(
-          password.length
-        )}`
-      );
+    try {
+      const authResponse = await authApi.signIn(credentials);
+      const accessToken = authResponse.session?.access_token ?? null;
+
+      let profile: SupabaseProfileResponse["user"] = authResponse.user;
+
+      if (accessToken) {
+        try {
+          const profileResponse = await authApi.getProfile(accessToken);
+          profile = profileResponse.user ?? profile;
+        } catch (profileError) {
+          console.warn("[LoginPage] Unable to fetch profile", profileError);
+        }
+      }
+
+      persistSession(authResponse, profile ?? null);
+
+      const resolvedUser =
+        profile ??
+        authResponse.user ??
+        authResponse.session?.user ??
+        (credentials.email
+          ? { id: credentials.email, email: credentials.email }
+          : null);
+
+      if (resolvedUser) {
+        login(resolvedUser);
+      } else {
+        console.warn("[LoginPage] No user information returned from sign-in.");
+      }
+
+      const welcomeName =
+        profile?.email ?? profile?.id ?? credentials.email ?? "there";
+      setSuccessMessage(`Welcome back, ${welcomeName}! Redirecting you now…`);
+
+      setTimeout(() => {
+        navigate("/");
+      }, 800);
+    } catch (error) {
+      const message =
+        error instanceof AuthApiError
+          ? error.message
+          : "We could not sign you in right now. Please try again.";
+      console.error("[LoginPage] Sign-in failure", error);
+      setErrorMessage(message);
+    } finally {
       setIsSubmitting(false);
-    }, 600);
+    }
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-sky-200 via-sky-300/90 to-sky-500 px-4 py-24 text-slate-900">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute right-[-15%] top-[-15%] h-80 w-80 rounded-full bg-white/30 blur-3xl" />
-        <div className="absolute bottom-[-20%] left-[-10%] h-96 w-96 rounded-full bg-cyan-200/40 blur-3xl" />
-      </div>
-      <div className="relative w-full max-w-xl">
-        <div className="relative overflow-hidden rounded-[28px] border border-white/70 bg-white/90 px-10 py-12 text-center shadow-[0_30px_90px_-50px_rgba(15,118,110,0.45)]">
-          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/90 via-white/80 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-br from-white via-white/80 to-sky-100/40" />
-          <form
-            className="relative z-10 flex w-full flex-col items-center gap-6"
-            onSubmit={handleSubmit}
+    <AuthLayout>
+      <div className="flex w-full flex-col items-center gap-10 px-2 text-center">
+        <form
+          className="relative flex w-full flex-col items-center gap-6 rounded-[32px] border border-white/60 bg-white/95 px-10 py-16 text-center shadow-[0_30px_90px_-40px_rgba(15,118,110,0.45)]"
+          onSubmit={handleSubmit}
+        >
+          <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[45%] select-none">
+            <img
+              src={ringsArt}
+              alt="Notebook binding rings"
+              className="scale-200"
+              draggable={false}
+            />
+          </div>
+
+          <AuthHeading
+            title="Login"
+            eyebrow="Interlink Notebook"
+            description="Welcome back. Enter your credentials to continue exploring Interlink."
+          />
+
+          <div className="mt-4 grid w-full gap-6 text-left text-sm font-medium text-slate-600">
+            <AuthInput
+              id="email"
+              label="Email"
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={credentials.email}
+              onChange={handleCredentialChange("email")}
+              required
+            />
+            <AuthInput
+              id="password"
+              label="Password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={credentials.password}
+              onChange={handleCredentialChange("password")}
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="mt-6 inline-flex items-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-sky-300"
+            disabled={isSubmitting}
           >
-            <div className="inline-flex items-center gap-4">
-              <span className="text-xs font-semibold uppercase tracking-[0.5em] text-sky-400">
-                Interlink
-              </span>
-              <span className="h-[1px] w-12 bg-sky-200" />
-              <span className="text-xs font-semibold uppercase tracking-[0.4em] text-sky-300">
-                Notebook
-              </span>
-            </div>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-800">
-              Sign-in Sheet
-            </h1>
-            <p className="max-w-lg text-sm text-slate-500">
-              This notebook-themed page is a placeholder for your login form.
-              Drop in the real fields and logic when you are ready.
+            {isSubmitting ? "Signing you in…" : "Log In"}
+          </button>
+
+          {errorMessage && (
+            <p className="text-sm font-medium text-red-600" role="alert">
+              {errorMessage}
             </p>
-            <div className="mt-4 grid w-full gap-6 text-left text-sm font-medium text-slate-600">
-              <label className="flex items-center gap-6" htmlFor="email">
-                <span className="w-28 shrink-0 text-xs uppercase tracking-wide text-slate-400">
-                  Email
-                </span>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  className="flex-1 rounded-full border border-dashed border-slate-300 bg-white/90 px-6 py-3 text-slate-700 shadow-inner shadow-white/40 outline-none transition hover:border-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </label>
-              <label className="flex items-center gap-6" htmlFor="password">
-                <span className="w-28 shrink-0 text-xs uppercase tracking-wide text-slate-400">
-                  Password
-                </span>
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  className="flex-1 rounded-full border border-dashed border-slate-300 bg-white/90 px-6 py-3 text-slate-700 shadow-inner shadow-white/40 outline-none transition hover:border-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-300/60"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </label>
-            </div>
-            <button
-              type="submit"
-              className="mt-6 inline-flex items-center rounded-full bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:bg-sky-300"
-              disabled={isSubmitting}
+          )}
+          {successMessage && (
+            <p className="text-sm font-medium text-emerald-600" role="status">
+              {successMessage}
+            </p>
+          )}
+
+          <p className="text-xs font-medium uppercase tracking-[0.4em] text-sky-200/80">
+            Page 01
+          </p>
+          <p className="text-xs text-slate-500">
+            Need an account?{" "}
+            <Link
+              to="/signup"
+              className="font-semibold text-sky-500 underline decoration-dotted underline-offset-4 hover:text-sky-400"
             >
-              {isSubmitting ? "Submitting…" : "Log In"}
-            </button>
-            <p className="text-xs font-medium uppercase tracking-[0.4em] text-sky-200/80">
-              Page 01
-            </p>
-          </form>
-        </div>
+              Create one here
+            </Link>
+            .
+          </p>
+        </form>
       </div>
-    </div>
+    </AuthLayout>
   );
 };
 

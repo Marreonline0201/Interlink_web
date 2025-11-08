@@ -5,6 +5,8 @@ import ringsArt from "../assets/rings.png";
 import AuthHeading from "../components/AuthHeading";
 import AuthInput from "../components/AuthInput";
 import AuthLayout from "../components/AuthLayout";
+import type { SignupPayload } from "../types/user";
+import { authApi, AuthApiError } from "../services/authApi";
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -13,31 +15,49 @@ const SignupPage = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!fullName || !email || !password || !confirmPassword) {
-      alert("Please complete all fields before signing up.");
+      setErrorMessage("Please complete all fields before signing up.");
       return;
     }
 
     if (password !== confirmPassword) {
-      alert("Passwords must match.");
+      setErrorMessage("Passwords must match.");
       return;
     }
 
     setIsSubmitting(true);
+    setErrorMessage(null);
 
-    setTimeout(() => {
-      alert(
-        `Simulated signup:\n• Name: ${fullName}\n• Email: ${email}\n• Password: ${"*".repeat(
-          password.length
-        )}`
-      );
+    try {
+      const signupPayload: SignupPayload = {
+        name: fullName,
+        email,
+        password,
+      };
+
+      await authApi.signUp(signupPayload);
+      navigate("/survey", {
+        replace: true,
+        state: {
+          name: fullName,
+          email,
+        },
+      });
+    } catch (error) {
+      const message =
+        error instanceof AuthApiError
+          ? error.message
+          : "We could not complete your signup right now. Please try again.";
+      console.error("[SignupPage] Signup failure", error);
+      setErrorMessage(message);
+    } finally {
       setIsSubmitting(false);
-      navigate("/login");
-    }, 750);
+    }
   };
 
   return (
@@ -111,6 +131,12 @@ const SignupPage = () => {
           >
             {isSubmitting ? "Creating account…" : "Create Account"}
           </button>
+
+          {errorMessage && (
+            <p className="text-sm font-medium text-red-600" role="alert">
+              {errorMessage}
+            </p>
+          )}
 
           <p className="text-xs font-medium uppercase tracking-[0.4em] text-sky-200/80">
             Page 02
