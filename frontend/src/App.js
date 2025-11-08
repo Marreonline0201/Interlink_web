@@ -4,6 +4,8 @@ import Home from './pages/Home';
 import Profile from './pages/Profile';
 import FindFriend from './pages/FindFriend';
 import Leaderboard from './pages/Leaderboard';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 import { AppBar, Toolbar, Button, Container, CssBaseline, Typography } from '@mui/material';
 
 function App() {
@@ -19,6 +21,7 @@ function App() {
           <Button color="inherit" component={RouterLink} to="/profile">Profile</Button>
           <Button color="inherit" component={RouterLink} to="/find-friend">Find Friend</Button>
           <Button color="inherit" component={RouterLink} to="/leaderboard">Leaderboard</Button>
+          <Button color="inherit" component={RouterLink} to="/login">Login</Button>
         </Toolbar>
       </AppBar>
       <Container sx={{ mt: 4 }}>
@@ -27,6 +30,8 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/find-friend" element={<FindFriend />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
         </Routes>
       </Container>
     </Router>
