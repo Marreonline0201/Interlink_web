@@ -7,9 +7,11 @@ import AuthLayout from "../components/AuthLayout";
 import NotebookCanvas from "../components/NotebookCanvas";
 import type { SignupPayload } from "../types/user";
 import { authApi, AuthApiError } from "../services/authApi";
+import { useAuth } from "../context/AuthContext";
 
 const SignupPage = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,6 +43,22 @@ const SignupPage = () => {
       };
 
       await authApi.signUp(signupPayload);
+
+      try {
+        const signInResponse = await authApi.signIn({
+          email,
+          password,
+        });
+        if (signInResponse?.user) {
+          login(signInResponse.user, signInResponse.session ?? null);
+        }
+      } catch (autoLoginError) {
+        console.warn(
+          "[SignupPage] Auto sign-in after signup failed; continuing to survey",
+          autoLoginError
+        );
+      }
+
       navigate("/survey", {
         replace: true,
         state: {
