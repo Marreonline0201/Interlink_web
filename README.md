@@ -125,4 +125,8 @@ Visit `http://localhost:5173`. Stubbed auth instructions appear on the login scr
 
 ---
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> ccee4b848eff3055bd0b5df484de280a94c23ec2
 Have fun exploring Interlink! Reach out if you want to extend the prototype or polish it post-hackathon.
