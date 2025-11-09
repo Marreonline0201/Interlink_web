@@ -43,6 +43,7 @@ export const useScheduleManager = (userId?: string | null) => {
   const isFetchingRef = useRef(false);
   const activeUserRef = useRef<string | null>(null);
   const slotsRef = useRef<FreeTimeSlot[]>([]);
+  const previousUserRef = useRef<string | null>(null);
 
   useEffect(() => {
     slotsRef.current = freeTimeSlots;
@@ -106,6 +107,27 @@ export const useScheduleManager = (userId?: string | null) => {
       }));
     } finally {
       if (activeUserRef.current === userId) {
+        isFetchingRef.current = false;
+      }
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    const previousUserId = previousUserRef.current;
+    if (previousUserId !== (userId ?? null)) {
+      slotsRef.current = [];
+      setFreeTimeSlots([]);
+      lastSyncedRef.current = JSON.stringify([]);
+      setSyncState((prev) => ({
+        ...prev,
+        isLoading: false,
+        loadError: null,
+        isSyncing: false,
+        syncError: null,
+      }));
+      previousUserRef.current = userId ?? null;
+      activeUserRef.current = userId ?? null;
+      if (!userId) {
         isFetchingRef.current = false;
       }
     }
