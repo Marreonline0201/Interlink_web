@@ -380,10 +380,6 @@ const buildFilters = (payload: MatchRequestPayload) => {
   const filters: Record<string, unknown> = {};
   const normalizedUser = sanitizeUser(payload.user);
 
-  if (normalizedUser?.interests && normalizedUser.interests.length > 0) {
-    filters.interests = normalizedUser.interests;
-  }
-
   if (payload.requireSameCourse && normalizedUser?.major) {
     filters.majors = [normalizedUser.major];
   }

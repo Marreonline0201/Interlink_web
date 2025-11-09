@@ -149,15 +149,30 @@ const MatchRequestForm = ({
               We&apos;ll only show partners who opted into sharing course info.
             </span>
           </div>
-          <input
-            type="checkbox"
-            checked={preferences.requireSameCourse}
-            onChange={(event) =>
-              handleRequireSameCourseChange(event.target.checked)
+          <button
+            type="button"
+            onClick={() =>
+              handleRequireSameCourseChange(!preferences.requireSameCourse)
             }
             disabled={controlsDisabled}
-            className="h-5 w-5 rounded border-slate-600 bg-slate-900 text-sky-400 focus:ring-sky-400"
-          />
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
+              preferences.requireSameCourse
+                ? "bg-sky-500"
+                : "bg-slate-700/70"
+            } ${controlsDisabled ? "opacity-60" : "hover:bg-sky-400/80"}`}
+            aria-pressed={preferences.requireSameCourse}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                preferences.requireSameCourse ? "translate-x-5" : "translate-x-1"
+              }`}
+            />
+            <span className="sr-only">
+              {preferences.requireSameCourse
+                ? "Disable same course filter"
+                : "Enable same course filter"}
+            </span>
+          </button>
         </label>
 
         <div className="flex items-center justify-between rounded-3xl border border-slate-700 bg-slate-900/60 px-5 py-4 text-sm text-slate-200">

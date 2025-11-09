@@ -3,6 +3,7 @@ import { Link, NavLink } from "react-router-dom";
 import {
   CalendarDays,
   LayoutDashboard,
+  Link2,
   LogIn,
   Sparkles,
   UserCircle2,
@@ -106,7 +107,7 @@ const TopNav = ({
           className="inline-flex items-center gap-3 text-lg font-semibold text-slate-100"
         >
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-sky-600 via-sky-500 to-cyan-400 text-white shadow-md shadow-cyan-500/40">
-            <LayoutDashboard className="h-5 w-5" />
+            <Link2 className="h-5 w-5" />
           </span>
           <span className="hidden sm:inline-block">Interlink</span>
         </Link>
