@@ -13,8 +13,83 @@ const logError = (method, error) => {
   console.error(`[AuthController.${method}]`, error);
 };
 
+const coerceOptionalString = (value) => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const coerceOptionalNumber = (value) => {
+  if (value === null || value === undefined) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+};
+
+const coerceArrayOfStrings = (value) => {
+  if (!value) return undefined;
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((item) => coerceOptionalString(item))
+      .filter((item) => Boolean(item));
+    return normalized.length > 0 ? normalized : undefined;
+  }
+  if (typeof value === "string") {
+    const normalized = value
+      .split(",")
+      .map((item) => coerceOptionalString(item))
+      .filter((item) => Boolean(item));
+    return normalized.length > 0 ? normalized : undefined;
+  }
+  return undefined;
+};
+
+const buildSignupMetadata = (body = {}) => {
+  const profile = typeof body.profile === "object" ? body.profile : {};
+  const metadata = {
+    name:
+      coerceOptionalString(body.name) ??
+      coerceOptionalString(profile.name) ??
+      coerceOptionalString(profile.fullName),
+    major:
+      coerceOptionalString(body.major) ?? coerceOptionalString(profile.major),
+    focusArea:
+      coerceOptionalString(body.focusArea) ??
+      coerceOptionalString(profile.focusArea),
+    headline:
+      coerceOptionalString(body.headline) ??
+      coerceOptionalString(profile.headline),
+    bio: coerceOptionalString(body.bio) ?? coerceOptionalString(profile.bio),
+    preferredEmail:
+      coerceOptionalString(body.preferredEmail) ??
+      coerceOptionalString(profile.preferredEmail),
+    experienceLevel:
+      coerceOptionalString(body.experienceLevel) ??
+      coerceOptionalString(profile.experienceLevel),
+    company:
+      coerceOptionalString(body.company) ??
+      coerceOptionalString(profile.company),
+    hobbies:
+      coerceArrayOfStrings(body.hobbies) ??
+      coerceArrayOfStrings(profile.hobbies),
+    interests:
+      coerceArrayOfStrings(body.interests) ??
+      coerceArrayOfStrings(profile.interests),
+    club: coerceOptionalString(body.club) ?? coerceOptionalString(profile.club),
+    age: coerceOptionalNumber(body.age) ?? coerceOptionalNumber(profile.age),
+  };
+
+  const sanitizedEntries = Object.entries(metadata).filter(
+    ([, value]) => value !== undefined
+  );
+
+  return {
+    ...Object.fromEntries(sanitizedEntries),
+    createdVia: "api",
+  };
+};
+
 exports.signUp = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
   if (!email || !password)
     return res.status(400).json({ error: "email and password required" });
 
@@ -27,6 +102,8 @@ exports.signUp = async (req, res) => {
         : { isConfigured: true };
     logDebug("signUp", "Supabase client status", supabaseStatus);
 
+    const metadata = buildSignupMetadata(req.body);
+
     // Try server-side create (service role) if available
     if (
       supabase.auth &&
@@ -38,25 +115,36 @@ exports.signUp = async (req, res) => {
         email,
         password,
         email_confirm: true,
+        user_metadata: metadata,
       });
       if (error) throw error;
       logDebug("signUp", "Supabase admin createUser succeeded", {
         email,
         userId: data?.user?.id || data?.id,
+        metadataKeys: Object.keys(metadata),
       });
-      return res.status(201).json({ user: data });
+      const user = data?.user || data;
+      return res.status(201).json({ user });
     }
 
     // Fallback: sign up (may require email confirmation depending on Supabase settings)
     if (supabase.auth && supabase.auth.signUp) {
       logDebug("signUp", "Attempting Supabase auth.signUp");
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata,
+        },
+      });
       if (error) throw error;
       logDebug("signUp", "Supabase auth.signUp succeeded", {
         email,
         userId: data?.user?.id || data?.id,
+        metadataKeys: Object.keys(metadata),
       });
-      return res.status(201).json({ user: data });
+      const user = data?.user || data;
+      return res.status(201).json({ user });
     }
 
     logDebug(
@@ -73,7 +161,7 @@ exports.signUp = async (req, res) => {
 };
 
 exports.signIn = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
   if (!email || !password)
     return res.status(400).json({ error: "email and password required" });
 
@@ -137,6 +225,9 @@ const allowedMetadataFields = [
   "avatarUrl",
   "bannerUrl",
   "hobbies",
+  "interests",
+  "favoriteSpot",
+  "classes",
   "metadata",
   "connections",
 ];
@@ -158,6 +249,68 @@ exports.updateProfile = async (req, res) => {
     }
     return accumulator;
   }, {});
+
+  const normalizeList = (value) => {
+    if (!value) return undefined;
+    if (Array.isArray(value)) {
+      const list = value
+        .map((entry) => `${entry}`.trim())
+        .filter((entry) => entry.length > 0);
+      return list.length ? list : undefined;
+    }
+    if (typeof value === "string") {
+      const list = value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+      return list.length ? list : undefined;
+    }
+    return undefined;
+  };
+
+  if (metadataUpdates.hobbies !== undefined) {
+    metadataUpdates.hobbies = normalizeList(metadataUpdates.hobbies) || [];
+  }
+
+  if (metadataUpdates.interests !== undefined) {
+    metadataUpdates.interests = normalizeList(metadataUpdates.interests) || [];
+  }
+
+  if (metadataUpdates.classes !== undefined) {
+    metadataUpdates.classes = normalizeList(metadataUpdates.classes) || [];
+  }
+
+  if (metadataUpdates.favoriteSpot !== undefined) {
+    const trimmed =
+      typeof metadataUpdates.favoriteSpot === "string"
+        ? metadataUpdates.favoriteSpot.trim()
+        : "";
+    metadataUpdates.favoriteSpot = trimmed || null;
+  }
+
+  if (metadataUpdates.major !== undefined) {
+    const trimmed =
+      typeof metadataUpdates.major === "string"
+        ? metadataUpdates.major.trim()
+        : "";
+    metadataUpdates.major = trimmed || null;
+  }
+
+  if (metadataUpdates.preferredEmail !== undefined) {
+    const trimmed =
+      typeof metadataUpdates.preferredEmail === "string"
+        ? metadataUpdates.preferredEmail.trim()
+        : "";
+    metadataUpdates.preferredEmail = trimmed || null;
+  }
+
+  if (metadataUpdates.name !== undefined) {
+    const trimmed =
+      typeof metadataUpdates.name === "string"
+        ? metadataUpdates.name.trim()
+        : "";
+    metadataUpdates.name = trimmed || null;
+  }
 
   const hasMetadataUpdates = Object.keys(metadataUpdates).length > 0;
   const wantsEmailUpdate =
@@ -189,17 +342,20 @@ exports.updateProfile = async (req, res) => {
     attributes.email = nextEmail;
   }
 
-  if (hasMetadataUpdates) {
-    const currentMetadata =
-      req.user.user_metadata && typeof req.user.user_metadata === "object"
-        ? req.user.user_metadata
-        : {};
+  const currentMetadata =
+    req.user.user_metadata && typeof req.user.user_metadata === "object"
+      ? req.user.user_metadata
+      : {};
 
-    attributes.user_metadata = {
+  let nextUserMetadata = currentMetadata;
+
+  if (hasMetadataUpdates) {
+    nextUserMetadata = {
       ...currentMetadata,
       ...metadataUpdates,
       updatedAt: new Date().toISOString(),
     };
+    attributes.user_metadata = nextUserMetadata;
   }
 
   try {
@@ -214,6 +370,55 @@ exports.updateProfile = async (req, res) => {
       emailChanged: Boolean(attributes.email),
       metadataKeys: hasMetadataUpdates ? Object.keys(metadataUpdates) : [],
     });
+
+    if (typeof supabase.from === "function") {
+      const toStringArray = (value) => {
+        if (!value) return [];
+        if (Array.isArray(value)) {
+          return value
+            .map((entry) => `${entry}`.trim())
+            .filter((entry) => entry.length > 0);
+        }
+        if (typeof value === "string") {
+          return value
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0);
+        }
+        return [];
+      };
+
+      const profilePayload = {
+        id: userId,
+        full_name:
+          nextUserMetadata.name ||
+          nextUserMetadata.displayName ||
+          updatedUser?.user_metadata?.name ||
+          updatedUser?.email,
+        email: attributes.email || updatedUser?.email || req.user.email,
+        major: nextUserMetadata.major || null,
+        interests: toStringArray(nextUserMetadata.interests),
+        hobbies: toStringArray(nextUserMetadata.hobbies),
+        classes: toStringArray(nextUserMetadata.classes),
+        bio: nextUserMetadata.bio || null,
+        fun_fact: null,
+        favorite_spot: nextUserMetadata.favoriteSpot || null,
+        vibe_check: null,
+        is_opted_in: true,
+      };
+
+      const { error: profileError } = await supabase
+        .from("match_profiles")
+        .upsert(profilePayload, { onConflict: "id" });
+
+      if (profileError) {
+        console.warn(
+          "[AuthController.updateProfile] Failed to sync match_profiles",
+          profileError
+        );
+      }
+    }
+
     return res.status(200).json({ user: updatedUser });
   } catch (err) {
     logError("updateProfile", err);

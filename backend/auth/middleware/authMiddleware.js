@@ -32,6 +32,47 @@ module.exports = async function authMiddleware(req, res, next) {
       const { data, error } = await supabase.auth.getUser(token);
       if (error) throw error;
       req.user = data.user || data;
+
+      // Fetch latest unified profile to merge metadata
+      try {
+        if (req.user?.id && typeof supabase.from === "function") {
+          const profile = await supabase
+            .from("match_profiles")
+            .select(
+              "full_name,email,major,interests,hobbies,bio,fun_fact,favorite_spot,vibe_check"
+            )
+            .eq("id", req.user.id)
+            .maybeSingle();
+
+          if (!profile.error && profile.data) {
+            const metadata = {
+              ...(req.user.user_metadata || {}),
+              name:
+                profile.data.full_name ||
+                req.user.user_metadata?.name ||
+                req.user.user_metadata?.full_name,
+              major: profile.data.major ?? req.user.user_metadata?.major,
+              interests: profile.data.interests ?? req.user.user_metadata?.interests,
+              hobbies: profile.data.hobbies ?? req.user.user_metadata?.hobbies,
+              bio: profile.data.bio ?? req.user.user_metadata?.bio,
+              funFact:
+                profile.data.fun_fact ?? req.user.user_metadata?.funFact,
+              favoriteSpot:
+                profile.data.favorite_spot ??
+                req.user.user_metadata?.favoriteSpot,
+              vibeCheck:
+                profile.data.vibe_check ?? req.user.user_metadata?.vibeCheck,
+            };
+            req.user.user_metadata = metadata;
+          }
+        }
+      } catch (profileError) {
+        console.warn(
+          "[authMiddleware] Failed to merge match profile metadata",
+          profileError
+        );
+      }
+
       debug('Supabase token verification succeeded', {
         userId: req.user?.id,
         email: req.user?.email,
